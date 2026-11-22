@@ -1,0 +1,37 @@
+# Same pipeline for Bitbucket Pipelines. Deploy uses OIDC (no long-lived AWS keys):
+# configure an IAM role that trusts the Bitbucket OIDC provider and set AWS_ROLE_ARN.
+image: node:22
+
+definitions:
+  caches:
+    npm: ~/.npm
+  steps:
+    - step: &check
+        name: typecheck, test, replay gate
+        caches: [npm]
+        script:
+          - npm ci
+          - npm run typecheck
+          - npm test
+          - npm run simulate -- --ci
+        artifacts:
+          - reports/replay.md
+
+pipelines:
+  default:
+    - step: *check
+  branches:
+    main:
+      - step: *check
+      - step:
+          name: deploy dev
+          deployment: development
+          trigger: manual
+          oidc: true
+          caches: [npm]
+          script:
+            - export AWS_REGION=eu-north-1
+            - export AWS_WEB_IDENTITY_TOKEN_FILE=$(pwd)/web-identity-token
+            - echo $BITBUCKET_STEP_OIDC_TOKEN > $AWS_WEB_IDENTITY_TOKEN_FILE
+            - npm ci
+            - npx sst deploy --stage dev

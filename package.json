@@ -1,0 +1,35 @@
+{
+  "name": "cutover",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shadow-mode migration of a store price integration from a legacy system to serverless on AWS (TypeScript + SST).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "simulate": "tsx scripts/simulate.ts",
+    "check": "npm run typecheck && npm test && npm run simulate -- --ci",
+    "deploy": "sst deploy --stage dev"
+  },
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "^2.37.0",
+    "@aws-lambda-powertools/metrics": "^2.37.0",
+    "@aws-sdk/client-dynamodb": "^3.1175.0",
+    "@aws-sdk/client-s3": "^3.1175.0",
+    "@aws-sdk/client-sqs": "^3.1175.0",
+    "@aws-sdk/lib-dynamodb": "^3.1175.0",
+    "sst": "^4.17.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  }
+}

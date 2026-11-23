@@ -126,6 +126,43 @@ either way. The habit that matters is pricing each design choice before it ships
 choices decide the bill at 100× the volume. Every resource is tagged `costCenter=price-integration`
 for cost allocation.
 
+## Sustainability
+
+Cost and energy mostly fall together here, and the same choices drive both:
+
+- **Nothing runs when nothing happens.** Lambda, SQS and on-demand DynamoDB have no idle
+  capacity. Between nightly exports the integration uses no compute at all, unlike a server
+  sized for the peak.
+- **arm64 (Graviton) for both functions.** AWS reports better performance per watt for Graviton
+  than for comparable x86. I have not measured that for this workload, so it is AWS's figure, not mine.
+- **Fewer, fuller invocations.** Batching 10 messages per invocation does the same work with
+  10× fewer cold starts, SDK setups and metric flushes.
+- **Less written, less stored.** One conditional put instead of a two-item transaction is 4×
+  fewer write units. Logs expire after one month, set explicitly (`logging.retention`). CloudWatch's
+  own default is *never*, which is one of the most common silent cost lines in a serverless account.
+- **Not done yet:** a lifecycle rule that expires processed exports in S3 after the retention
+  period the business needs.
+
+## Security
+
+- **Least privilege per function, by action.** SST's `link` is convenient, but it grants
+  `dynamodb:*` / `s3:*` / `sqs:*` on the linked resource. So the functions don't use it. The engine
+  may do exactly one thing: `dynamodb:PutItem` on the price table. Ingest may `s3:GetObject` under
+  `exports/`, `s3:PutObject` under `rejects/` and `sqs:SendMessage` to the queue, and has no access
+  to the table. A compromised ingest function cannot rewrite prices.
+- **No long-lived keys anywhere.** Both pipelines deploy through OIDC: the CI job gets a
+  short-lived role session. There are no secrets in the code or in the config.
+- **Every input is untrusted.** The CSV comes from another system, so each row is validated with
+  zod at ingest (SKU format, store id, price bounds, campaign 0–90 %, ISO dates) and again when
+  the engine reads it off the queue. A malformed message ends in the DLQ, not in a store's price.
+- **No recursive trigger.** Rejects are written back to the same bucket, so the S3 notification
+  is filtered to `exports/`. Without that filter, ingest would trigger itself on every reject file.
+- **Encryption at rest is on by default** for S3, SQS and DynamoDB in new resources. No personal
+  data passes through the integration: prices, SKUs and store ids only, so logging full
+  unexplained rows is safe.
+- **Production is protected from deletion.** `protect` and `removal: "retain"` on the production
+  stage: `sst remove` refuses, and the table and bucket survive a stack deletion.
+
 ## Run it
 
 ```bash
@@ -153,7 +190,7 @@ deploy step: no long-lived AWS keys in the pipeline.
   diff, small samples, 100 %), idempotency on redelivery, CSV rejects with line numbers, and the
   cost model.
 - **Not yet verified by a deploy:** `sst.config.ts` is written against the SST v3/v4 component
-  docs (Queue with DLQ + partial responses, Bucket notifications, Dynamo with TTL), but SST's
+  docs (Queue with DLQ + partial responses, Bucket notifications, Dynamo with TTL, function permissions), but SST's
   global types only resolve after a first `sst deploy`, so it is not typechecked in CI. The
   Lambda handlers are thin adapters around the tested core and are typechecked against the
   AWS SDK v3 and Powertools types.

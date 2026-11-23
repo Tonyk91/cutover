@@ -12,6 +12,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "scripts", "test", "sst-env.d.ts"],
+  "include": ["src", "scripts", "test"],
   "exclude": ["node_modules", ".sst", "sst.config.ts"]
 }

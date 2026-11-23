@@ -40,8 +40,13 @@ export default $config({
         architecture: "arm64",
         memory: "256 MB",
         timeout: "30 seconds",
-        link: [prices],
+        logging: { retention: "1 month" },
+        // Explicit permissions instead of `link`: link grants dynamodb:* on the table.
+        // The engine only ever needs one action. (SST adds the SQS receive/delete
+        // permissions for the subscription itself.)
+        permissions: [{ actions: ["dynamodb:PutItem"], resources: [prices.arn] }],
         environment: {
+          TABLE_NAME: prices.name,
           // The rollout is a config value. Move it 0 → 10 → 50 → 100 only when
           // `npm run simulate` / the dashboard gate says ADVANCE.
           ROLLOUT_PCT: process.env.ROLLOUT_PCT ?? "0",
@@ -63,7 +68,14 @@ export default $config({
             architecture: "arm64",
             memory: "512 MB",
             timeout: "5 minutes",
-            link: [incoming, queue],
+            logging: { retention: "1 month" },
+            // Read only exports/, write only rejects/, send only to this queue.
+            permissions: [
+              { actions: ["s3:GetObject"], resources: [$interpolate`${incoming.arn}/exports/*`] },
+              { actions: ["s3:PutObject"], resources: [$interpolate`${incoming.arn}/rejects/*`] },
+              { actions: ["sqs:SendMessage"], resources: [queue.arn] },
+            ],
+            environment: { QUEUE_URL: queue.url },
           },
           events: ["s3:ObjectCreated:*"],
           filterPrefix: "exports/",

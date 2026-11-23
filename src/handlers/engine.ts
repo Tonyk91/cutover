@@ -1,10 +1,10 @@
 import type { SQSBatchResponse, SQSEvent } from "aws-lambda";
-import { Resource } from "sst";
 import { DynamoPriceStore, metrics, PowertoolsLog, PowertoolsMetrics } from "../adapters/aws.js";
 import { processChange, type EngineConfig } from "../core/process.js";
 import { PriceChange } from "../core/types.js";
+import { requiredEnv } from "./env.js";
 
-const store = new DynamoPriceStore(Resource.Prices.name);
+const store = new DynamoPriceStore(requiredEnv("TABLE_NAME"));
 const deps = { store, metrics: new PowertoolsMetrics(), log: new PowertoolsLog() };
 
 /** Read per invocation so a rollout change is a config change, not a deploy. */

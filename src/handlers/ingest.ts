@@ -1,13 +1,14 @@
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SendMessageBatchCommand, SQSClient } from "@aws-sdk/client-sqs";
 import type { S3Event } from "aws-lambda";
-import { Resource } from "sst";
 import { logger, metrics } from "../adapters/aws.js";
 import { MetricUnit } from "@aws-lambda-powertools/metrics";
 import { parseExport } from "../core/csv.js";
+import { requiredEnv } from "./env.js";
 
 const s3 = new S3Client({});
 const sqs = new SQSClient({});
+const QUEUE_URL = requiredEnv("QUEUE_URL");
 
 /**
  * Triggered when the legacy system drops an export in s3://<bucket>/exports/.
@@ -27,12 +28,12 @@ export async function handler(event: S3Event): Promise<void> {
       const chunk = ok.slice(i, i + 10);
       const res = await sqs.send(
         new SendMessageBatchCommand({
-          QueueUrl: Resource.PriceQueue.url,
+          QueueUrl: QUEUE_URL,
           Entries: chunk.map((c, j) => ({ Id: String(j), MessageBody: JSON.stringify(c) })),
         }),
       );
       if (res.Failed?.length) {
-        // Fail the invocation: S3 retries it, and idempotency makes the replay safe.
+        // Fail the invocation: Lambda retries the async S3 event, and idempotency makes the replay safe.
         throw new Error(`SQS rejected ${res.Failed.length} messages from ${key}`);
       }
     }
